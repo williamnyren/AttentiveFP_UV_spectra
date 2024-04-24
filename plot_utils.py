@@ -85,3 +85,52 @@ def make_subplot(predictions, config):
 def make_lineplot(predictions):
     import seaborn as sns
     sns.lineplot(data=predictions, x='y_true', y='y_pred')
+
+def make_subplot_v2(predictions, config):
+    """Generate subplots for different prediction scenarios."""
+    def plot_subplot(ax, data, title, x, x_text):
+        """Helper function to plot subplots."""
+        
+        if not data.empty:
+            y_pred, y_true, loss = data['y_pred'].iloc[0], data['y'].iloc[0], data['loss'].iloc[0]
+            ax.plot(x, y_pred, label='Prediction')
+            ax.plot(x, y_true, label='True', linestyle='--')
+
+            ax.text(int(0.6*x_text/0.75), max(y_pred) * 0.8, data['smiles'].iloc[0], fontsize=12, ha='center')
+            ax.text(x_text, max(y_pred) * 0.95, f'Loss: {loss:.4f}', fontsize=12, ha='center')
+            ax.set_title(title)
+            ax.legend()
+
+    wavelengths = np.linspace(config['min_wavelength'], config['max_wavelength'], config['out_dim'])
+    x_text = wavelengths[int(0.75 * len(wavelengths))]
+
+    fig, axs = plt.subplots(3, 2, figsize=(16, 20))  # Adjust size based on your needs
+    # sort predictions based on loss
+    predictions = predictions.sort_values(by = ['loss'])
+    nbest = predictions.nsmallest(100, 'loss')
+    #Find first smiles in nbest with n or c in the string
+    nbest = nbest[nbest['smiles'].str.contains('n|c', case=True, regex=True)]
+    if nbest.empty:
+        best = predictions.nsmallest(1, 'loss')
+    else:
+        best = nbest.nsmallest(1, 'loss')
+    scenarios = {
+        'Worst': predictions.nlargest(1, 'loss'),
+        'Best': best,
+        'Average': predictions.iloc[(predictions['loss']-predictions['loss'].mean()).abs().argsort()[:1]],
+        'Median': predictions.iloc[(predictions['loss']-predictions['loss'].median()).abs().argsort()[:1]],
+        '25th percentile': predictions.iloc[(predictions['loss']-predictions['loss'].quantile(0.25)).abs().argsort()[:1]],
+        '75th percentile': predictions.iloc[(predictions['loss']-predictions['loss'].quantile(0.75)).abs().argsort()[:1]]
+    }
+
+    for ax, (title, data) in zip(axs.flat, scenarios.items()):
+        plot_subplot(ax, data, title, wavelengths, x_text)
+    
+    plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, hspace=0.3, wspace=0.2)
+
+    plt.tick_params(axis='x', labelsize=12)  # Increase x-axis label size
+    plt.tick_params(axis='y', labelsize=12)
+   
+    plt.draw()
+
+    return fig
